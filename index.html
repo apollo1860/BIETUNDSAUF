@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BIET & SAUF</title>
+  <style>
+    :root {
+      --primary: #ff4081;
+      --accent: #7c4dff;
+      --bg: #1e1e2f;
+      --card: #2e2e3f;
+      --text: #ffffff;
+      --button-hover: #ff80ab;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      padding: 20px;
+      max-width: 700px;
+      margin: auto;
+      animation: fadeIn 1s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.4);
+      animation: fadeIn 0.6s ease-in-out;
+    }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin: 10px 5px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background-color: var(--button-hover);
+      transform: scale(1.05);
+      box-shadow: 0 0 10px var(--button-hover);
+    }
+
+    input, select {
+      background: #3c3c4f;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px;
+      margin: 8px 0;
+      width: 100%;
+      font-size: 16px;
+    }
+
+    h2, h3, label {
+      color: var(--accent);
+    }
+
+    .hidden { display: none; }
+    .team { margin-top: 10px; font-weight: bold; }
+    hr { margin: 20px 0; border-color: #444; }
+  </style>
+</head>
+<body>
+
+<h2>BIET & SAUF</h2>
+
+<div id="setup" class="card">
+  <label>Spielernamen eingeben (gerade Anzahl, min. 4):</label><br/>
+  <div id="playerInputs"></div>
+  <button onclick="addPlayer()">+ Spieler hinzufügen</button>
+  <button onclick="startTeamSelection()">Weiter zur Teambildung</button>
+</div>
+
+<div id="teamSelection" class="card hidden">
+  <p>Teams zufällig zusammenstellen?</p>
+  <button onclick="assignTeams(true)">Ja</button>
+  <button onclick="assignTeams(false)">Nein, manuell</button>
+  <div id="manualTeamInputs" class="hidden"></div>
+</div>
+
+<div id="game" class="card hidden">
+  <h3>Runde <span id="roundCounter">1</span>/11</h3>
+  <p><strong>Kategorie:</strong> <span id="categoryText"></span></p>
+  <div id="rolesArea"></div>
+  <div id="winnerSelection" class="hidden"></div>
+  <div id="answerEvaluation" class="hidden"></div>
+</div>
+
+<div id="endScreen" class="card hidden">
+  <h3>Spiel beendet!</h3>
+  <div id="finalPoints"></div>
+</div>
+
+<script>
+let players = [];
+let teams = [];
+let currentRound = 1;
+let maxRounds = 11;
+let categories = ["Fußballstadien", "Make-Up Produkte", "Länder in Asien", "Lieder von Madonna"];
+let roundCategory = "";
+let bidders = [];
+let answerers = [];
+let teamPoints = {};
+let biddingWinnerTeam = "";
+let bidAmount = 0;
+
+function addPlayer() {
+  const div = document.createElement("div");
+  const index = document.querySelectorAll('#playerInputs input').length + 1;
+  div.innerHTML = `<input placeholder="Spieler ${index}">`;
+  document.getElementById("playerInputs").appendChild(div);
+}
+
+function startTeamSelection() {
+  const inputs = document.querySelectorAll('#playerInputs input');
+  players = Array.from(inputs).map(input => input.value.trim()).filter(name => name);
+  if (players.length < 4 || players.length % 2 !== 0) {
+    alert("Bitte eine gerade Anzahl von mindestens 4 Spielern eingeben.");
+    return;
+  }
+  document.getElementById("setup").classList.add("hidden");
+  document.getElementById("teamSelection").classList.remove("hidden");
+}
+
+function assignTeams(random) {
+  if (random) {
+    players = shuffle(players);
+    teams = [];
+    for (let i = 0; i < players.length; i += 2) {
+      teams.push([players[i], players[i+1]]);
+    }
+    startGame();
+  } else {
+    let container = document.getElementById("manualTeamInputs");
+    container.innerHTML = "";
+    document.getElementById("manualTeamInputs").classList.remove("hidden");
+    for (let i = 0; i < players.length / 2; i++) {
+      container.innerHTML += `
+        <div class="team">
+          Team ${i+1}: 
+          <select id="team${i}-1">${players.map(p => `<option>${p}</option>`).join("")}</select>
+          &
+          <select id="team${i}-2">${players.map(p => `<option>${p}</option>`).join("")}</select>
+        </div>`;
+    }
+    container.innerHTML += `<button onclick="confirmManualTeams()">Spiel starten</button>`;
+  }
+}
+
+function confirmManualTeams() {
+  let assigned = new Set();
+  teams = [];
+  for (let i = 0; i < players.length / 2; i++) {
+    const p1 = document.getElementById(`team${i}-1`).value;
+    const p2 = document.getElementById(`team${i}-2`).value;
+    if (p1 === p2 || assigned.has(p1) || assigned.has(p2)) {
+      alert("Jeder Spieler darf nur einmal vorkommen.");
+      return;
+    }
+    assigned.add(p1);
+    assigned.add(p2);
+    teams.push([p1, p2]);
+  }
+  startGame();
+}
+
+function startGame() {
+  document.getElementById("teamSelection").classList.add("hidden");
+  document.getElementById("game").classList.remove("hidden");
+  teams.forEach(t => teamPoints[t.join(" & ")] = 0);
+  startRound();
+}
+
+function startRound() {
+  document.getElementById("roundCounter").innerText = currentRound;
+  roundCategory = categories[Math.floor(Math.random() * categories.length)];
+  document.getElementById("categoryText").innerText = roundCategory;
+  document.getElementById("winnerSelection").classList.add("hidden");
+  document.getElementById("answerEvaluation").classList.add("hidden");
+
+  bidders = [];
+  answerers = [];
+  teams.forEach(team => {
+    const shuffled = shuffle(team);
+    bidders.push(shuffled[0]);
+    answerers.push(shuffled[1]);
+  });
+
+  const starter = bidders[Math.floor(Math.random() * bidders.length)];
+
+  let rolesHTML = `<p><strong>Bieterfragen pro Team:</strong></p>`;
+  teams.forEach((team, i) => {
+    const bieter = bidders[i];
+    rolesHTML += `<p>Team ${i+1} (${team.join(" & ")}): Wie viele "${roundCategory}" kann ${bieter} nennen?</p>`;
+  });
+
+  let biddingInstructions = `<hr><p><strong>${starter}</strong> beginnt mit dem Bieten.</p>
+    <label>Welches Team hat das höchste Gebot?</label><br/>
+    <select id="winningTeamSelect">
+      ${teams.map(t => `<option value="${t.join(" & ")}">${t.join(" & ")}</option>`).join("")}
+    </select><br/>
+    <label>Gebotene Anzahl:</label><br/>
+    <input id="bidAmountInput" type="number" min="1"><br/>
+    <button onclick="confirmBiddingResult()">Bestätigen</button>`;
+
+  document.getElementById("rolesArea").innerHTML = rolesHTML + biddingInstructions;
+}
+
+function confirmBiddingResult() {
+  biddingWinnerTeam = document.getElementById("winningTeamSelect").value;
+  bidAmount = parseInt(document.getElementById("bidAmountInput").value);
+  if (!bidAmount || bidAmount <= 0) {
+    alert("Bitte eine gültige Anzahl angeben.");
+    return;
+  }
+
+  let html = `<p>Hat das Team <strong>${biddingWinnerTeam}</strong> das Gebot von <strong>${bidAmount}</strong> erfüllt?</p>`;
+  html += `<button onclick="resolveAnswer(true)">✅ Ja</button>
+           <button onclick="resolveAnswer(false)">❌ Nein</button>`;
+  document.getElementById("winnerSelection").classList.remove("hidden");
+  document.getElementById("winnerSelection").innerHTML = html;
+}
+
+function resolveAnswer(success) {
+  document.getElementById("answerEvaluation").classList.remove("hidden");
+  if (success) {
+    teamPoints[biddingWinnerTeam] += bidAmount;
+    document.getElementById("answerEvaluation").innerHTML = `<p>${biddingWinnerTeam} bekommt ${bidAmount} Punkte und darf diese Schlücke verteilen.</p>`;
+  } else {
+    document.getElementById("answerEvaluation").innerHTML = `<p>${biddingWinnerTeam} hat es nicht geschafft. Der Bieter trinkt 3 Strafschlücke.</p>`;
+  }
+
+  currentRound++;
+  if (currentRound > maxRounds) {
+    setTimeout(showEndScreen, 1500);
+  } else {
+    setTimeout(startRound, 2000);
+  }
+}
+
+function showEndScreen() {
+  document.getElementById("game").classList.add("hidden");
+  document.getElementById("endScreen").classList.remove("hidden");
+  let out = `<h4>Endstand</h4><ul>`;
+  for (let [team, points] of Object.entries(teamPoints)) {
+    out += `<li>${team}: ${points} Punkte → ${points} Schlücke verteilen</li>`;
+  }
+  out += `</ul>`;
+  document.getElementById("finalPoints").innerHTML = out;
+}
+
+function shuffle(array) {
+  let a = [...array];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+</script>
+
+</body>
+</html>
