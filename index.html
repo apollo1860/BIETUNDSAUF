@@ -267,7 +267,7 @@ function startTimer() {
     timerCount++;
     if (!display) return;
     display.innerText = `⏳ Timer: ${timerCount}s`;
-    if (timerCount >= 60) {
+    if (timerCount >= 30) {
       clearInterval(timerInterval);
       display.innerText += " – ⏱ Zeit ist um!";
       document.getElementById("earlyStopContainer").classList.add("hidden");
